@@ -74,6 +74,17 @@ openclaw cron trigger reflector-memory
 
 Edit the prompts in `reference/` to adjust priority definitions, compression rules, or output format.
 
+## Enhanced Search with QMD (Optional)
+
+QMD adds hybrid search (BM25 + vectors + reranking) over your compressed memory files, making it easy to recall specific observations from weeks or months ago.
+
+```bash
+bash scripts/enable-qmd.sh           # Enable QMD backend
+bash scripts/enable-qmd.sh --disable # Revert to default
+```
+
+QMD is optional — OM works great standalone. If QMD is unavailable, OpenClaw falls back to built-in vector search. See the [README section on QMD](README.md#enhanced-search-with-qmd-optional) for architecture details and resource requirements.
+
 ## Relationship to MEMORY.md
 
 Options:

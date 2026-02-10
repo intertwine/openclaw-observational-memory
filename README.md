@@ -159,6 +159,72 @@ That's it. Your agent now has persistent, compressed memory.
 
 ---
 
+## Enhanced Search with QMD (Optional)
+
+Observational Memory solves the **writing** problem — compressing raw conversation into dense, searchable memory files. But what about the **reading** problem? When your agent needs to recall something from weeks ago, how does it find the right observation?
+
+[QMD](https://github.com/nicholasgriffintn/qmd) is a local-first hybrid search engine that combines **BM25** (keyword matching), **vector embeddings** (semantic similarity), and **reranking** (relevance scoring) into a single search pipeline. It's the perfect complement to Observational Memory:
+
+```
+  Conversation        Observer          observations.md        QMD indexes
+  (raw messages)      (every 15m)       (compressed notes)     (BM25 + vectors)
+                                                               
+  ┌──────────────┐   ┌───────────┐     ┌──────────────┐      ┌──────────────┐
+  │ 200+ messages│──►│ Compress  │────►│ ~2K tokens   │─────►│ BM25 index   │
+  │ per day      │   │ & score   │     │ per day      │      │ Vector embed │
+  └──────────────┘   └───────────┘     └──────────────┘      │ Reranker     │
+                                                              └──────┬───────┘
+                                                                     │
+                                                              memory_search
+                                                              "What was that
+                                                               Postgres issue?"
+                                                                     │
+                                                              ┌──────▼───────┐
+                                                              │ Top 6 results│
+                                                              │ with citations│
+                                                              └──────────────┘
+```
+
+### Why They Work Well Together
+
+Compressed observations are **better search targets** than raw conversation. Instead of searching through thousands of noisy messages, QMD searches through dense, pre-scored notes with clear timestamps and priority levels. This means:
+
+- **Higher precision** — observations strip filler, keeping only facts and decisions
+- **Better embeddings** — dense text produces more meaningful vectors than "hey can you help me with..."
+- **Faster indexing** — 2K tokens/day vs 50K tokens/day
+
+### OM Works Great Without QMD
+
+QMD is entirely optional. Without it, your agent still reads `observations.md` and `reflections.md` on startup and has full context. QMD adds the ability to **search** across weeks or months of observations when the agent needs to recall something specific.
+
+If QMD is unavailable or fails, OpenClaw automatically falls back to its built-in vector search — so there's no hard dependency.
+
+### Resource Requirements
+
+QMD runs locally and uses GGUF models for embedding and reranking:
+
+- **Full setup:** ~2 GB RAM for local GGUF models (embedding + reranking)
+- **Lighter setup:** BM25 keyword search works with zero extra RAM; vector embeddings fall back to OpenAI API if GGUF models can't load
+- **Disk:** ~1 GB for model files on first run
+
+On smaller VMs (< 4 GB RAM), QMD gracefully degrades — BM25 still works, and you get hybrid search with API-based embeddings instead of local ones.
+
+### Enable QMD
+
+```bash
+bash scripts/enable-qmd.sh
+```
+
+See the [enable script](scripts/enable-qmd.sh) for details, or run `bash scripts/enable-qmd.sh --help`.
+
+To disable and revert to the default memory backend:
+
+```bash
+bash scripts/enable-qmd.sh --disable
+```
+
+---
+
 ## Architecture
 
 ```
@@ -245,7 +311,8 @@ observational-memory/
 │   └── reflector-prompt.md# System prompt for the Reflector agent
 └── scripts/
     ├── install.sh         # Automated setup
-    └── uninstall.sh       # Clean removal
+    ├── uninstall.sh       # Clean removal
+    └── enable-qmd.sh     # Optional: enable QMD hybrid search
 ```
 
 ---
