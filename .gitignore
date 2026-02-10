@@ -1,0 +1,10 @@
+# Generated memory files (created by install.sh / cron agents)
+memory/
+
+# macOS
+.DS_Store
+
+# Editors
+*.swp
+*.swo
+*~
