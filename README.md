@@ -1,47 +1,59 @@
 # 🧠 Observational Memory for OpenClaw
 
-**Give your AI agent humanlike long-term memory — no RAG, no embeddings, no databases.**
+**Give your AI agent humanlike long-term memory with hybrid search — no RAG pipelines, no databases, no infrastructure.**
 
-Two background agents (Observer + Reflector) continuously compress your conversation history into dense, prioritized memory files. Your agent reads these on startup and instantly has full context about you, your projects, your preferences, and what happened while it was "asleep."
+Two background agents (Observer + Reflector) compress your conversation history into dense, prioritized memory files. [QMD](https://github.com/tobi/qmd) hybrid search (BM25 + vectors + reranking) makes those compressed memories instantly findable. Your agent reads them on startup and has full context about you, your projects, your preferences, and what happened while it was "asleep."
 
-Achieves **5–40× compression** over raw conversation history while preserving what matters: facts, preferences, decisions, emotional tone, and project context. Scored **SOTA on [LongMemEval](https://arxiv.org/abs/2410.10813)**.
+The compressed observations achieve **5–40× token reduction** while preserving what matters — and they're actually **better search targets** than raw conversation. Dense, pre-scored notes produce higher-precision results than searching through thousands of noisy messages.
 
-> Inspired by [Mastra's Observational Memory](https://mastra.ai/docs/memory/observational-memory) — adapted and extended for the [OpenClaw](https://openclaw.ai) ecosystem.
+> Inspired by [Mastra's Observational Memory](https://mastra.ai/docs/memory/observational-memory) (SOTA on [LongMemEval](https://arxiv.org/abs/2410.10813)) — adapted and extended with hybrid search for the [OpenClaw](https://openclaw.ai) ecosystem.
 
 ---
 
 ## How It Works
 
+The system has two layers: **compression** (Observer + Reflector) and **retrieval** (QMD hybrid search). Together they solve the full memory problem — writing dense memories *and* finding them when you need them.
+
 ```
-  Conversation                     Observations                   Reflections
-  (raw messages)                   (compressed notes)             (long-term memory)
-                                                                  
-  ┌──────────────┐  Observer       ┌──────────────┐  Reflector   ┌──────────────┐
-  │ Hey, can you │  (every 15m)   │ 🔴 14:30 User│  (daily)     │ ## Identity  │
-  │ help me set  │ ────────────►  │ setting up   │ ──────────►  │ Name: Alex   │
-  │ up Postgres  │                │ PostgreSQL   │              │ Role: Backend│
-  │ for the new  │                │ for project  │              │ dev          │
-  │ project? I   │                │ "Atlas." Pre-│              │              │
-  │ tried SQLite │                │ fers Postgres│              │ ## Projects  │
-  │ but it can't │                │ over SQLite  │              │ Atlas: Migra-│
-  │ handle the   │                │ for concurr- │              │ ted SQLite → │
-  │ concurrency  │                │ ency reasons.│              │ PostgreSQL   │
-  │ we need...   │                │              │              │              │
-  │ [200+ more   │                │ 🟡 14:45 De- │              │ ## Prefs     │
-  │  messages]   │                │ bugging conn │              │ 🔴 Prefers   │
-  │              │                │ pool config  │              │ Postgres for │
-  └──────────────┘                └──────────────┘              │ prod workloads│
-                                                                └──────────────┘
-  ~50K tokens                      ~2K tokens                    ~500 tokens
+  Conversation        Observer          Memory Files           QMD Hybrid Search
+  (raw messages)      (every 30m)       (compressed)           (BM25 + vectors + reranking)
+                                                               
+  ┌──────────────┐   ┌───────────┐     ┌──────────────┐      ┌──────────────┐
+  │ Hey, can you │   │           │     │ 🔴 14:30 User│      │              │
+  │ help me set  │   │ Compress  │     │ setting up   │      │ BM25 index   │
+  │ up Postgres  │──►│ & score   │────►│ PostgreSQL   │─────►│ Vector embed │
+  │ for the new  │   │ priorities│     │ for project  │      │ LLM reranker │
+  │ project?...  │   │           │     │ "Atlas"      │      │              │
+  │ [200+ msgs]  │   └───────────┘     └──────┬───────┘      └──────┬───────┘
+  └──────────────┘                            │                      │
+                                              │                      │
+  ~50K tokens/day     Reflector        ┌──────▼───────┐      memory_search
+                      (daily)          │ ## Identity  │      "What was that
+                     ┌───────────┐     │ Name: Alex   │       Postgres decision?"
+                     │ Condense  │────►│ ## Projects  │             │
+                     │ & merge   │     │ Atlas: PG    │      ┌──────▼───────┐
+                     └───────────┘     │ ## Prefs     │      │ Top results  │
+                                       │ 🔴 Postgres  │      │ with citations│
+                                       └──────────────┘      └──────────────┘
+                                        ~500 tokens total
 ```
 
-**Three tiers of memory, each more compressed than the last:**
+**Three tiers of memory, each more compressed than the last — all searchable via QMD:**
 
 | Tier | Updated | Retention | Size | Contents |
 |------|---------|-----------|------|----------|
 | **Raw Messages** | Real-time | Session only | ~50K tokens/day | Full conversation |
-| **Observations** | Every 15 min | 7 days | ~2K tokens/day | Timestamped, prioritized notes |
+| **Observations** | Every 30 min | 7 days | ~2K tokens/day | Timestamped, prioritized notes |
 | **Reflections** | Daily | Indefinite | 200–600 lines total | Stable identity, projects, preferences |
+
+### Why Compression + Hybrid Search
+
+Most memory systems choose between compression (summaries) and retrieval (RAG). This system does both, and the combination is better than either alone:
+
+- **Compressed observations are better search targets.** Stripping filler and scoring by priority means QMD searches through signal, not noise.
+- **BM25 catches what vectors miss.** Project names, error codes, API endpoints, specific tools — exact-match search finds these instantly. Vector search alone often can't.
+- **Vectors catch what BM25 misses.** "That database discussion last week" finds your PostgreSQL migration notes even though the word "database" never appears in them.
+- **Local reranking** scores results by actual relevance, not just keyword or embedding similarity.
 
 ---
 
@@ -67,7 +79,6 @@ Achieves **5–40× compression** over raw conversation history while preserving
 - 🔴 14:42 User prefers PostgreSQL over SQLite for production workloads
 - 🟡 14:45 Debugging connection pool exhaustion — PgBouncer max_client_conn was set too low
   - 🟡 14:52 Resolved: increased to 200 connections, switched to transaction mode
-- 🟢 15:00 Quick weather check — no follow-up needed
 - 🔴 15:10 User wants to add full-text search to Atlas
   - 🟡 15:10 Considering pg_trgm vs tsvector — leaning toward tsvector
 ```
@@ -78,6 +89,7 @@ Achieves **5–40× compression** over raw conversation history while preserving
 # Reflections — Long-Term Memory
 
 *Last updated: 2026-02-10 04:00 UTC*
+*Last reflected: 2026-02-10 15:10 UTC*
 
 ## Core Identity
 - **Name:** Alex Chen
@@ -85,7 +97,6 @@ Achieves **5–40× compression** over raw conversation history while preserving
 - **Communication style:** Direct, technical, appreciates concise answers
 - **Working hours:** ~09:00–18:00 PST, occasional evening sessions
 - **Preferences:** PostgreSQL, Python, FastAPI, prefers CLI over GUI
-- **Pet peeves:** Verbose explanations when a code snippet would do
 
 ## Active Projects
 
@@ -99,13 +110,7 @@ Achieves **5–40× compression** over raw conversation history while preserving
 ## Preferences & Opinions
 - 🔴 PostgreSQL over SQLite for anything production
 - 🔴 Prefers code examples over explanations
-- 🔴 Uses Render.com for managed infrastructure
 - 🟡 Interested in PgBouncer vs pgpool — chose PgBouncer for simplicity
-
-## Relationship & Communication
-- Likes brief, direct answers — expand only when asked
-- Appreciates when the agent catches potential issues proactively
-- Uses humor when frustrated (dry/sarcastic)
 ```
 
 ---
@@ -120,14 +125,29 @@ Achieves **5–40× compression** over raw conversation history while preserving
 ### Install
 
 ```bash
-git clone https://github.com/intertwine/observational-memory.git
-cd observational-memory
+git clone https://github.com/intertwine/openclaw-observational-memory.git
+cd openclaw-observational-memory
 bash scripts/install.sh
 ```
 
 This will:
 1. Create `memory/observations.md` and `memory/reflections.md` in your workspace
-2. Set up two cron jobs: Observer (every 15 min) and Reflector (daily at 04:00 UTC)
+2. Set up two cron jobs: Observer (every 30 min) and Reflector (daily at 04:00 UTC)
+
+### Enable Hybrid Search (Recommended)
+
+```bash
+bash scripts/enable-qmd.sh
+```
+
+This installs [QMD](https://github.com/tobi/qmd) and configures OpenClaw to use hybrid search (BM25 + vectors + reranking) over your memory files. QMD auto-indexes observations, reflections, and daily memory files every 5 minutes.
+
+**Resource requirements:**
+- **Full setup:** ~2 GB RAM for local GGUF models (embedding + reranking)
+- **Lighter setup:** BM25 keyword search works with zero extra RAM; vector embeddings fall back to OpenAI API if local models can't load
+- **Disk:** ~1 GB for model files on first run
+
+To disable: `bash scripts/enable-qmd.sh --disable`
 
 ### Configure
 
@@ -155,109 +175,51 @@ Add these lines to your `AGENTS.md` (or equivalent startup instructions):
 6. Read `memory/reflections.md` — long-term condensed memory (auto-maintained by Reflector)
 ```
 
-That's it. Your agent now has persistent, compressed memory.
-
----
-
-## Enhanced Search with QMD (Optional)
-
-Observational Memory solves the **writing** problem — compressing raw conversation into dense, searchable memory files. But what about the **reading** problem? When your agent needs to recall something from weeks ago, how does it find the right observation?
-
-[QMD](https://github.com/nicholasgriffintn/qmd) is a local-first hybrid search engine that combines **BM25** (keyword matching), **vector embeddings** (semantic similarity), and **reranking** (relevance scoring) into a single search pipeline. It's the perfect complement to Observational Memory:
-
-```
-  Conversation        Observer          observations.md        QMD indexes
-  (raw messages)      (every 15m)       (compressed notes)     (BM25 + vectors)
-                                                               
-  ┌──────────────┐   ┌───────────┐     ┌──────────────┐      ┌──────────────┐
-  │ 200+ messages│──►│ Compress  │────►│ ~2K tokens   │─────►│ BM25 index   │
-  │ per day      │   │ & score   │     │ per day      │      │ Vector embed │
-  └──────────────┘   └───────────┘     └──────────────┘      │ Reranker     │
-                                                              └──────┬───────┘
-                                                                     │
-                                                              memory_search
-                                                              "What was that
-                                                               Postgres issue?"
-                                                                     │
-                                                              ┌──────▼───────┐
-                                                              │ Top 6 results│
-                                                              │ with citations│
-                                                              └──────────────┘
-```
-
-### Why They Work Well Together
-
-Compressed observations are **better search targets** than raw conversation. Instead of searching through thousands of noisy messages, QMD searches through dense, pre-scored notes with clear timestamps and priority levels. This means:
-
-- **Higher precision** — observations strip filler, keeping only facts and decisions
-- **Better embeddings** — dense text produces more meaningful vectors than "hey can you help me with..."
-- **Faster indexing** — 2K tokens/day vs 50K tokens/day
-
-### OM Works Great Without QMD
-
-QMD is entirely optional. Without it, your agent still reads `observations.md` and `reflections.md` on startup and has full context. QMD adds the ability to **search** across weeks or months of observations when the agent needs to recall something specific.
-
-If QMD is unavailable or fails, OpenClaw automatically falls back to its built-in vector search — so there's no hard dependency.
-
-### Resource Requirements
-
-QMD runs locally and uses GGUF models for embedding and reranking:
-
-- **Full setup:** ~2 GB RAM for local GGUF models (embedding + reranking)
-- **Lighter setup:** BM25 keyword search works with zero extra RAM; vector embeddings fall back to OpenAI API if GGUF models can't load
-- **Disk:** ~1 GB for model files on first run
-
-On smaller VMs (< 4 GB RAM), QMD gracefully degrades — BM25 still works, and you get hybrid search with API-based embeddings instead of local ones.
-
-### Enable QMD
-
-```bash
-bash scripts/enable-qmd.sh
-```
-
-See the [enable script](scripts/enable-qmd.sh) for details, or run `bash scripts/enable-qmd.sh --help`.
-
-To disable and revert to the default memory backend:
-
-```bash
-bash scripts/enable-qmd.sh --disable
-```
+That's it. Your agent now has persistent, compressed, searchable memory.
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────┐  every 15 min   ┌──────────────────┐
+┌─────────────────┐  every 30 min   ┌──────────────────┐
 │   Main Agent    │ ◄── reads ───── │  Observer Agent   │
 │   Session       │                 │  (cron, isolated) │
 └────────┬────────┘                 └────────┬──────────┘
          │                                   │ writes
          │ reads on startup          ┌───────▼──────────┐
-         └──────────────────────────►│ memory/           │
-                                     │  observations.md  │
-                                     │  reflections.md   │
-                                     └───────┬──────────┘
-                                             │ reads + trims
-                                     ┌───────▼──────────┐
-                                     │ Reflector Agent   │
-                                     │ (daily cron)      │
-                                     └──────────────────┘
+         │                           │ memory/           │
+         │                           │  observations.md  │◄──── QMD indexes
+         └──────────────────────────►│  reflections.md   │      (BM25 + vectors
+                                     └───────┬──────────┘       + reranking)
+                                             │ reads + trims         │
+                                     ┌───────▼──────────┐           │
+                                     │ Reflector Agent   │     memory_search
+                                     │ (daily cron)      │     finds relevant
+                                     └──────────────────┘      memories on demand
 ```
 
 ### Observer Agent
-- Runs as an OpenClaw cron job (default: every 15 minutes)
+- Runs as an OpenClaw cron job (default: every 30 minutes)
 - Reads recent session history from the main agent session
 - Compresses unprocessed messages into timestamped, prioritized notes
 - Appends to `memory/observations.md`
 - Maintains a "Current Context" block with active tasks, mood, and suggested next actions
+- Skips heartbeats and system messages — only logs meaningful exchanges
 
 ### Reflector Agent
 - Runs daily (default: 04:00 UTC)
-- Reads all observations and existing reflections
-- Merges, promotes, demotes, and archives entries based on frequency and recency
-- Overwrites `memory/reflections.md` with a clean, condensed long-term memory document
+- Uses **incremental updates** — reads existing reflections as a stable base, merges only new observations
+- Promotes, demotes, and archives entries based on frequency and recency
+- Tracks a `Last reflected` timestamp to avoid reprocessing old observations
 - Trims observations older than 7 days
+
+### QMD Hybrid Search
+- [QMD](https://github.com/tobi/qmd) indexes all memory files automatically (5-minute refresh)
+- **BM25** catches exact matches: project names, error codes, tool names, URLs
+- **Vector search** catches semantic matches: "that auth issue" finds your OAuth debugging notes
+- **LLM reranker** scores results by actual relevance
+- Falls back gracefully: if QMD is unavailable, OpenClaw uses its built-in vector search
 
 ### Priority System
 
@@ -295,7 +257,7 @@ openclaw cron trigger reflector-memory   # run reflector now
 
 ### Model Selection
 
-The install script defaults to `anthropic/claude-sonnet-4-20250514`. Both agents work well with any capable model — Sonnet-class or better is recommended for the observer, while the reflector benefits from stronger reasoning (Opus-class) for complex merging decisions.
+The install script defaults to `anthropic/claude-sonnet-4-20250514`. Both agents work well with any capable model. Sonnet-class or better is recommended for the observer. The reflector benefits from stronger reasoning for complex merging, but works well with smaller models too (we run ours on Kimi K2.5, free tier).
 
 ---
 
@@ -310,32 +272,39 @@ observational-memory/
 │   ├── observer-prompt.md # System prompt for the Observer agent
 │   └── reflector-prompt.md# System prompt for the Reflector agent
 └── scripts/
-    ├── install.sh         # Automated setup
+    ├── install.sh         # Automated setup (Observer + Reflector)
     ├── uninstall.sh       # Clean removal
-    └── enable-qmd.sh     # Optional: enable QMD hybrid search
+    └── enable-qmd.sh     # Enable QMD hybrid search
 ```
 
 ---
 
 ## FAQ
 
-**Q: Does this replace RAG / vector search?**
-A: For personal assistant use cases, yes. Observational memory works better for remembering *about a person* — their preferences, projects, communication style. RAG is better for searching large document collections. They're complementary.
+**Q: Do I need QMD?**
+A: Observational memory works well standalone — your agent reads the compressed files on startup and has full context. QMD adds the ability to *search* across weeks or months of observations when the agent needs to recall something specific. For agents with long histories or many projects, hybrid search makes a real difference.
+
+**Q: Does this replace RAG?**
+A: For personal assistant memory, yes. Observational memory + QMD handles remembering *about a person* (preferences, projects, communication style) better than traditional RAG. For searching large document collections, RAG is still the right tool.
 
 **Q: How much does it cost to run?**
-A: The observer processes only new messages each run (~100–500 input tokens typical). The reflector reads more but runs only once daily. Expect ~$0.05–0.20/day with Sonnet-class models.
+A: The observer processes only new messages each run (~100–500 input tokens typical). The reflector reads more but runs only once daily. Expect ~$0.05–0.20/day with Sonnet-class models, or $0 with free-tier models like Kimi K2.5. QMD runs locally with no API costs.
 
 **Q: What if the observer misses something?**
-A: The observer errs on the side of keeping observations ("when in doubt, keep it"). The reflector handles cleanup. You can also manually edit `memory/observations.md` at any time.
+A: The observer errs on the side of keeping observations. The reflector handles cleanup. You can also manually edit `memory/observations.md` at any time.
+
+**Q: What about large observation histories?**
+A: The reflector uses **incremental updates** — it reads its own previous output as a stable base and only processes new observations since its last run. This keeps input bounded regardless of total history size, preventing quality degradation from large inputs.
 
 **Q: Can I use this outside OpenClaw?**
-A: The prompts are generic and work with any agent framework that supports cron-like scheduling and file-based memory. The install script is OpenClaw-specific, but the pattern is portable.
+A: The prompts are generic and work with any agent framework that supports cron-like scheduling and file-based memory. The install script is OpenClaw-specific, but the pattern is portable. See [intertwine/observational-memory](https://github.com/intertwine/observational-memory) for a version targeting Claude Code and Codex CLI.
 
 ---
 
 ## Credits
 
 - **Inspired by** [Mastra's Observational Memory](https://mastra.ai/docs/memory/observational-memory) — the original OM pattern that achieved SOTA on LongMemEval
+- **Hybrid search powered by** [QMD](https://github.com/tobi/qmd) by Tobi Lütke — local-first BM25 + vectors + reranking
 - **Built for** the [OpenClaw](https://openclaw.ai) community
 - **License:** MIT — fork it, customize it, ship it
 
