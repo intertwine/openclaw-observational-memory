@@ -4,9 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A two-tier compressed memory system for OpenClaw agents. Two background agents (Observer + Reflector) run on cron schedules to compress raw conversation history into dense memory files that an agent reads on startup.
+A two-tier compressed memory system for AI coding agents. Two background agents (Observer + Reflector) compress raw conversation history into dense memory files that an agent reads on startup.
 
-**This is not a Python/JS/etc. application** — it's a set of prompt files (`reference/`), shell scripts (`scripts/`), and documentation. There is no build step, no test suite, and no dependencies beyond the `openclaw` CLI.
+This repo contains **reference prompts** and **OpenClaw integration scripts**. It is not a standalone application — it's a set of prompt files (`reference/`), shell scripts (`scripts/`), and documentation. There is no build step, no test suite, and no dependencies beyond the `openclaw` CLI.
+
+A companion Python package ([`observational-memory`](https://github.com/intertwine/observational-memory)) provides a standalone CLI (`om`) with the same Observer/Reflector logic plus transcript parsing, backfill, search, and session hooks for Claude Code and Codex.
 
 ## Key Commands
 
@@ -34,21 +36,23 @@ openclaw cron list
 The system has three tiers of memory, each more compressed:
 
 1. **Raw Messages** (real-time, session only) — full conversation
-2. **Observations** (`memory/observations.md`, updated every 15 min by Observer) — timestamped, prioritized notes with a "Current Context" block
+2. **Observations** (`memory/observations.md`, updated every 15–30 min by Observer) — timestamped, prioritized notes with a "Current Context" block
 3. **Reflections** (`memory/reflections.md`, updated daily by Reflector) — stable long-term memory: identity, projects, preferences (target: 200–600 lines)
 
 The Observer and Reflector are **isolated cron agents** — they don't share a session with the main agent. They communicate only through the memory files.
 
 ### Observer (`reference/observer-prompt.md`)
-- Cron: every 15 minutes (default)
+- Cron: every 15 minutes (default, configurable)
 - Reads main session history, compresses unprocessed messages into prioritized observations (🔴 important, 🟡 contextual, 🟢 minor)
-- Skips runs with <10 new messages
-- Appends to `memory/observations.md`
+- Skips runs with <10 new meaningful messages (ignores heartbeats, system messages, cron notifications)
+- Appends to `memory/observations.md` — one `### Observations` block per day, never duplicates
+- Maintains a "Current Context" block (active task, mood, key entities, suggested next, open questions)
 
 ### Reflector (`reference/reflector-prompt.md`)
-- Cron: daily at 04:00 UTC (default)
-- Reads observations + existing reflections, merges/promotes/demotes/archives entries
-- Overwrites `memory/reflections.md`
+- Cron: daily at 04:00 UTC (default, configurable)
+- **Incremental updates:** reads only new observations since `Last reflected` timestamp, merges into existing reflections
+- Does not regenerate from scratch — makes surgical edits to the stable reflections document
+- Overwrites `memory/reflections.md` with updated timestamps
 - Trims observations older than 7 days
 
 ### Install/Uninstall Scripts (`scripts/`)
@@ -60,4 +64,6 @@ The Observer and Reflector are **isolated cron agents** — they don't share a s
 
 - When modifying prompts in `reference/`, preserve the priority system (🔴/🟡/🟢) and the output format sections — downstream agents depend on these structures.
 - The reflections target size (200–600 lines) and observation retention window (7 days) are defined in the prompts, not in config files.
+- The `Last reflected` timestamp in reflections.md controls incremental processing — the Reflector only reads observations from that date onward.
+- The Observer's "Never Log" list (heartbeats, cron notifications, system messages) prevents noise from polluting observations.
 - `SKILL.md` is the OpenClaw skill integration guide — keep it in sync with README.md when making changes to installation or configuration.

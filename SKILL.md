@@ -42,7 +42,7 @@ The install script creates two cron jobs:
 | Job | Schedule | Prompt | Purpose |
 |-----|----------|--------|---------|
 | `observer-memory` | `*/15 * * * *` | `observer-prompt.md` | Compress recent messages → observations |
-| `reflector-memory` | `0 4 * * *` | `reflector-prompt.md` | Condense observations → reflections |
+| `reflector-memory` | `0 4 * * *` | `reflector-prompt.md` | Incrementally update reflections from new observations |
 
 ## Configuration
 
@@ -70,6 +70,7 @@ openclaw cron trigger reflector-memory
 
 - **Observer threshold:** Skips runs with fewer than ~10 new messages (configurable in prompt)
 - **Reflector target:** Aims for 200–600 lines in reflections.md (configurable in prompt)
+- **Reflector incremental:** Only processes observations since `Last reflected` timestamp; chunks large inputs automatically
 - **Observation retention:** 7 days before the reflector trims old entries
 
 Edit the prompts in `reference/` to adjust priority definitions, compression rules, or output format.
