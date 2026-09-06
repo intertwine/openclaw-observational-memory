@@ -1,7 +1,5 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## What This Is
 
 A two-tier compressed memory system for AI coding agents. Two background agents (Observer + Reflector) compress raw conversation history into dense memory files that an agent reads on startup.
@@ -16,8 +14,7 @@ A companion Python package ([`observational-memory`](https://github.com/intertwi
 # Install (creates memory files + cron jobs)
 bash scripts/install.sh
 
-# Install with options
-bash scripts/install.sh --model anthropic/claude-opus-4-6
+# Install with options (`bash scripts/install.sh --help` lists them all)
 bash scripts/install.sh --observer-interval "*/30 * * * *"
 bash scripts/install.sh --reflector-schedule "0 6 * * *"
 
@@ -33,32 +30,11 @@ openclaw cron list
 
 ## Architecture
 
-The system has three tiers of memory, each more compressed:
+Three tiers, each more compressed than the last: raw session messages → `memory/observations.md` (written by the Observer, every 15 minutes by default: timestamped notes with 🔴/🟡/🟢 priorities plus a "Current Context" block) → `memory/reflections.md` (written by the Reflector, daily: stable identity, projects, and preferences, updated incrementally from the `Last reflected` timestamp onward).
 
-1. **Raw Messages** (real-time, session only) — full conversation
-2. **Observations** (`memory/observations.md`, updated every 15–30 min by Observer) — timestamped, prioritized notes with a "Current Context" block
-3. **Reflections** (`memory/reflections.md`, updated daily by Reflector) — stable long-term memory: identity, projects, preferences (target: 200–600 lines)
-
-The Observer and Reflector are **isolated cron agents** — they don't share a session with the main agent. They communicate only through the memory files.
-
-### Observer (`reference/observer-prompt.md`)
-- Cron: every 15 minutes (default, configurable)
-- Reads main session history, compresses unprocessed messages into prioritized observations (🔴 important, 🟡 contextual, 🟢 minor)
-- Skips runs with <10 new meaningful messages (ignores heartbeats, system messages, cron notifications)
-- Appends to `memory/observations.md` — one `### Observations` block per day, never duplicates
-- Maintains a "Current Context" block (active task, mood, key entities, suggested next, open questions)
-
-### Reflector (`reference/reflector-prompt.md`)
-- Cron: daily at 04:00 UTC (default, configurable)
-- **Incremental updates:** reads only new observations since `Last reflected` timestamp, merges into existing reflections
-- Does not regenerate from scratch — makes surgical edits to the stable reflections document
-- Overwrites `memory/reflections.md` with updated timestamps
-- Trims observations older than 7 days
-
-### Install/Uninstall Scripts (`scripts/`)
-- Bash scripts that wrap `openclaw cron create/delete` commands
-- Idempotent — re-running install removes existing jobs first
-- Default workspace: `$OPENCLAW_WORKSPACE` or `~/.openclaw/workspace`
+- The Observer and Reflector are isolated OpenClaw cron agents. They never share a session with the main agent and communicate only through the memory files.
+- Their behavior (skip threshold, priority system, 7-day observation trim, reflections size target) lives in `reference/observer-prompt.md` and `reference/reflector-prompt.md`, not in config files.
+- `scripts/install.sh` and `scripts/uninstall.sh` wrap `openclaw cron create/delete`. Install is idempotent (it removes existing jobs first); the workspace defaults to `$OPENCLAW_WORKSPACE` or `~/.openclaw/workspace`.
 
 ## Editing Guidelines
 
