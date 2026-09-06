@@ -1,11 +1,15 @@
 ---
 name: observational-memory
 description: >
-  Two-tier compressed memory system using Observer and Reflector background agents.
-  Replaces raw conversation history with dense, prioritized observations and long-term reflections.
+  Unmaintained legacy Observer/Reflector memory skill. Historical reference only;
+  see LEGACY.md for retirement guidance. Not recommended for new installations.
 ---
 
 # Observational Memory — Skill Guide
+
+> **Unmaintained since September 5, 2026.** The setup below is historical.
+> No compatibility or security updates are promised. See [LEGACY.md](LEGACY.md)
+> for preserving memory and removing only this skill's jobs and instructions.
 
 ## Overview
 
