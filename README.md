@@ -1,5 +1,12 @@
 # 🧠 Observational Memory for OpenClaw
 
+> **Unmaintained legacy software — September 5, 2026.** No feature,
+> compatibility or security updates are promised. Prefer OpenClaw's native memory.
+> Preserve your Markdown archive, remove only this skill's observer/reflector jobs
+> and startup instructions, and see [LEGACY.md](LEGACY.md). Existing licenses remain.
+> The claims and installation instructions below describe the historical project;
+> they are not current comparative benchmark results or support commitments.
+
 **Give your AI agent humanlike long-term memory with hybrid search — no RAG pipelines, no databases, no infrastructure.**
 
 Two background agents (Observer + Reflector) compress your conversation history into dense, prioritized memory files. [QMD](https://github.com/tobi/qmd) hybrid search (BM25 + vectors + reranking) makes those compressed memories instantly findable. Your agent reads them on startup and has full context about you, your projects, your preferences, and what happened while it was "asleep."
